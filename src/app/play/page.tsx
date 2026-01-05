@@ -2228,6 +2228,15 @@ function PlayPageClient() {
         setSourceSearchLoading(false);
       }
     };
+
+    // 规范化标题用于聚合（去除特殊符号、括号、空格和全角空格）
+    const normalizeTitle = (title: string) => {
+      return title
+        .replace(/[\s\u3000]/g, '') // 去除空格和全角空格
+        .replace(/[()（）[\]【】{}「」『』<>《》]/g, '') // 去除各种括号
+        .replace(/[^\w\u4e00-\u9fa5]/g, ''); // 去除特殊符号，保留字母、数字、下划线和中文
+    };
+
     const fetchSourcesData = async (query: string): Promise<SearchResult[]> => {
       // 根据搜索词获取全部源信息
       try {
@@ -2245,8 +2254,8 @@ function PlayPageClient() {
               // 处理缓存的搜索结果，根据规则过滤
               results = cachedData.filter(
                 (result: SearchResult) =>
-                  result.title.replaceAll(' ', '').toLowerCase() ===
-                    videoTitleRef.current.replaceAll(' ', '').toLowerCase() &&
+                  normalizeTitle(result.title).toLowerCase() ===
+                    normalizeTitle(videoTitleRef.current).toLowerCase() &&
                   (videoYearRef.current
                     ? result.year.toLowerCase() === videoYearRef.current.toLowerCase()
                     : true) &&
@@ -2280,8 +2289,8 @@ function PlayPageClient() {
         // 处理搜索结果，根据规则过滤
         results = data.results.filter(
           (result: SearchResult) =>
-            result.title.replaceAll(' ', '').toLowerCase() ===
-              videoTitleRef.current.replaceAll(' ', '').toLowerCase() &&
+            normalizeTitle(result.title).toLowerCase() ===
+              normalizeTitle(videoTitleRef.current).toLowerCase() &&
             (videoYearRef.current
               ? result.year.toLowerCase() === videoYearRef.current.toLowerCase()
               : true) &&
