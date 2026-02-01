@@ -3,6 +3,11 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import {
+  getAllMusicPlayRecords,
+  saveMusicPlayRecord,
+  MusicPlayRecord,
+} from '@/lib/db.client';
 
 interface Song {
   id: string;
@@ -145,9 +150,49 @@ export default function MusicPage() {
     }
   };
 
-  // 页面加载时恢复播放状态
+  // 页面加载时恢复播放状态和数据库记录
   useEffect(() => {
-    restorePlayState();
+    const initializePlayState = async () => {
+      // 先恢复 localStorage 中的播放状态
+      restorePlayState();
+
+      // 从数据库加载播放记录
+      try {
+        const dbRecords = await getAllMusicPlayRecords();
+
+        // 将数据库记录转换为前端格式
+        const records: PlayRecord[] = [];
+        const songs: Song[] = [];
+
+        Object.entries(dbRecords).forEach(([key, record]) => {
+          records.push({
+            platform: record.platform,
+            id: record.id,
+            playTime: record.play_time,
+            duration: record.duration,
+            timestamp: record.save_time,
+          });
+
+          songs.push({
+            id: record.id,
+            name: record.name,
+            artist: record.artist,
+            album: record.album,
+            pic: record.pic,
+          });
+        });
+
+        // 更新状态
+        if (records.length > 0) {
+          setPlayRecords(records);
+          setPlaylist(songs);
+        }
+      } catch (error) {
+        console.error('加载播放记录失败:', error);
+      }
+    };
+
+    initializePlayState();
   }, []);
 
   // 监听播放状态变化，自动保存
@@ -578,6 +623,24 @@ export default function MusicPage() {
                 ...updated[playlistIndex],
                 playTime: audio.currentTime,
               };
+
+              // 保存到数据库
+              const record = updated[playlistIndex];
+              const dbRecord: MusicPlayRecord = {
+                platform: record.platform,
+                id: record.id,
+                name: currentSong.name,
+                artist: currentSong.artist,
+                album: currentSong.album,
+                pic: currentSong.pic,
+                play_time: audio.currentTime,
+                duration: audio.duration || 0,
+                save_time: Date.now(),
+              };
+
+              saveMusicPlayRecord(record.platform, record.id, dbRecord).catch(err => {
+                console.error('保存播放记录到数据库失败:', err);
+              });
             }
             return updated;
           });
@@ -607,6 +670,24 @@ export default function MusicPage() {
               ...updated[playlistIndex],
               duration: audio.duration,
             };
+
+            // 保存到数据库（包含时长信息）
+            const record = updated[playlistIndex];
+            const dbRecord: MusicPlayRecord = {
+              platform: record.platform,
+              id: record.id,
+              name: currentSong.name,
+              artist: currentSong.artist,
+              album: currentSong.album,
+              pic: currentSong.pic,
+              play_time: record.playTime,
+              duration: audio.duration,
+              save_time: Date.now(),
+            };
+
+            saveMusicPlayRecord(record.platform, record.id, dbRecord).catch(err => {
+              console.error('保存播放记录到数据库失败:', err);
+            });
           }
           return updated;
         });

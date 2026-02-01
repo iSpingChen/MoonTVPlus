@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { MusicPlayRecord } from '@/lib/db.client';
+import { getCachedSongs, setCachedSong } from '@/lib/music-song-cache';
 
 export const runtime = 'nodejs';
 
@@ -29,7 +30,28 @@ export async function GET(request: NextRequest) {
     }
 
     const records = await db.getAllMusicPlayRecords(authInfo.username);
-    return NextResponse.json(records, { status: 200 });
+
+    // 从缓存中获取歌曲信息并填充到记录中
+    const keys = Object.keys(records).map(key => {
+      const [platform, id] = key.split('+');
+      return { platform, id };
+    });
+    const cachedSongs = getCachedSongs(keys);
+
+    // 将缓存的歌曲信息合并到记录中
+    const enrichedRecords: Record<string, MusicPlayRecord> = {};
+    for (const [key, record] of Object.entries(records)) {
+      const cachedSong = cachedSongs.get(key);
+      enrichedRecords[key] = {
+        ...record,
+        name: cachedSong?.name || record.name,
+        artist: cachedSong?.artist || record.artist,
+        album: cachedSong?.album || record.album,
+        pic: cachedSong?.pic || record.pic,
+      };
+    }
+
+    return NextResponse.json(enrichedRecords, { status: 200 });
   } catch (err) {
     console.error('获取音乐播放记录失败', err);
     return NextResponse.json(
@@ -86,6 +108,16 @@ export async function POST(request: NextRequest) {
     }
 
     await db.saveMusicPlayRecord(authInfo.username, platform, id, record);
+
+    // 缓存歌曲信息到服务器内存
+    setCachedSong(platform, id, {
+      id: record.id,
+      name: record.name,
+      artist: record.artist,
+      album: record.album,
+      pic: record.pic,
+    });
+
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
     console.error('保存音乐播放记录失败', err);
